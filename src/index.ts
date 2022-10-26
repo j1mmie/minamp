@@ -5,21 +5,36 @@ import createVlc from '@richienb/vlc'
 import blessed from 'neo-blessed'
 import gradientString from 'gradient-string'
 import figlet, { Fonts } from 'figlet'
-import { Station, stations } from './Stations.js'
+import { getMarginHeight, getNum, Station, StationHeader, stations } from './Stations.js'
 import { GradientPresetKey, GradientPresets } from './GradientPresets.js'
+import { DelaySecs } from './Delay.js'
 
 type AsyncReturnType<T extends (...args: any) => Promise<any>> =
     T extends (...args: any) => Promise<infer R> ? R : any
 
-const APP_NAME    = 'cl_amp'
+const APP_NAME    = 'minamp'
 const APP_VERSION = '0.0.1'
 
 const RAINBOW_OPTIONS = { interpolation: 'hsv', hsvSpin: 'long' }
+
+const STARTUP_HEADER:StationHeader = {
+  title:    APP_NAME,
+  font:     'Chunky',
+  gradient: 'vice',
+  pos: {
+    top: 0,
+  },
+  margin: {
+    top:    0,
+    bottom: 0
+  }
+}
 
 
 class App {
   private _screen:blessed.Widgets.Screen
 
+  private _boxLoading:blessed.Widgets.BoxElement
   private _labelsCaptions:blessed.Widgets.TextElement
   private _labelHeader:blessed.Widgets.TextElement
   private _labelContent:blessed.Widgets.TextElement
@@ -44,12 +59,21 @@ class App {
     this._screen.title = APP_NAME
 
     this._labelHeader = blessed.text({
-      top:    1,
+      top:    getNum(STARTUP_HEADER.pos?.top),
       left:   2,
       right:  1,
       height: 1,
       content: '',
       border: undefined
+    })
+
+    this._boxLoading = blessed.box({
+      top:    2,
+      left:   2,
+      width:  24,
+      bottom: 0,
+      content: `${APP_NAME} v${APP_VERSION}, \nloading...`,
+      align: 'left'
     })
 
     this._labelsCaptions = blessed.text({
@@ -74,7 +98,7 @@ class App {
     })
 
     this._screen.append(this._labelHeader)
-    this._screen.append(this._labelsCaptions)
+    this._screen.append(this._boxLoading)
 
     this._screen.key(['escape', 'q', 'C-c'], this._end.bind(this))
     this._screen.key(['p'], this._togglePlayPause.bind(this))
@@ -82,23 +106,17 @@ class App {
     this._screen.key([','], this._prevStation.bind(this))
     this._screen.key(['r'], this._randomStation.bind(this))
 
-    this._labelContent.focus()
+    this._setHeaderContent(STARTUP_HEADER)
+
     this._screen.render()
   }
 
-  private async _macroText(text:string, font?:string):Promise<string> {
-    if (font === undefined || this._currentStation === undefined) {
-      return text
-    }
+  private async _macroText(text:string, font?:Fonts):Promise<string> {
+    if (!font) return text
 
     return new Promise<string>((resolve, reject) => {
-      if (this._currentStation === undefined) {
-        reject('No station')
-        return text
-      }
-
       figlet.text(text, {
-        font:             this._currentStation.font,
+        font:             font,
         horizontalLayout: 'default',
         verticalLayout:   'default',
         width:            80,
@@ -130,34 +148,42 @@ class App {
     return (text.trim().match(/\n/g) || []).length + 1
   }
 
-  private async _setHeaderContent(text:string, font?:Fonts, gradient?:(GradientPresetKey | tinycolor.ColorInput[])) {
-    const macroText = await this._macroText(text, font)
+  private async _setHeaderContent(header:StationHeader) {
+    const macroText = await this._macroText(header.title, header.font)
     const lineHeight = this._getLineHeight(macroText)
-    const headerHeight = lineHeight + (this._currentStation?.marginBottom || 0)
+    const headerTop = getNum(header.pos?.top)
+    const headerBottom = headerTop + lineHeight + getMarginHeight(header.margin)
 
-    // console.log(`lineHeight ${lineHeight}`)
-    // console.log(`headerHeight ${headerHeight}`)
+    this._labelHeader.top    = headerTop
+    this._labelHeader.height = headerBottom
+    this._labelsCaptions.top = headerBottom + 1
+    this._labelContent.top   = headerBottom + 1
+    this._boxLoading.top     = headerBottom
 
-    this._labelHeader.height = headerHeight
-    this._labelsCaptions.top = headerHeight + 1
-    this._labelContent.top   = headerHeight + 1
-
-    const gradientText = this._gradientText(macroText, gradient)
+    const gradientText = this._gradientText(macroText, header.gradient)
     this._labelHeader.setContent(gradientText)
     this._screen.render()
   }
 
   public async start() {
-    this._setHeaderContent(APP_NAME, 'Chunky', 'vice')
-
     this._vlc = await createVlc()
+    await DelaySecs(1)
+    await this._startUpdateLoop()
+
+  }
+
+  private async _startUpdateLoop() {
+    this._labelsCaptions.setContent('Artist: \nTitle:  ')
+    this._labelsCaptions.width = 24
+
+    this._screen.remove(this._boxLoading)
+    this._screen.append(this._labelsCaptions)
+    this._screen.append(this._labelContent)
 
     let startupStationIndex = stations.findIndex(_ => _.default)
     this._setCurrentStation(startupStationIndex)
 
-    this._labelsCaptions.setContent('Artist: \nTitle:  ')
-    this._labelsCaptions.width = 24
-    this._screen.append(this._labelContent)
+    await this._updateMeta()
 
     this._updateInterval = setInterval(this._updateMeta.bind(this), 1500)
   }
@@ -277,7 +303,7 @@ class App {
       this._currentStation = station
     }
 
-    this._setHeaderContent(this._currentStation.name, this._currentStation.font, this._currentStation.gradient)
+    this._setHeaderContent(this._currentStation.header)
     this._labelContent.setContent('--\n--')
 
     await this._vlc.command('in_play', {

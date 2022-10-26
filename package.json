@@ -1,0 +1,31 @@
+{
+  "name": "cl_amp",
+  "main": "dist/index",
+  "type": "module",
+  "_moduleAliases": {
+    "@": "dist/src"
+  },
+  "devDependencies": {
+    "@jest/types": "^29.2.1",
+    "@richienb/vlc": "^3.0.2",
+    "@types/blessed": "^0.1.19",
+    "@types/figlet": "^1.5.5",
+    "@types/gradient-string": "^1.1.2",
+    "@types/module-alias": "^2.0.1",
+    "@types/node": "^18.11.4",
+    "figlet": "^1.5.2",
+    "gradient-string": "^2.0.2",
+    "jest": "^29.2.2",
+    "module-alias": "^2.2.2",
+    "neo-blessed": "^0.2.0",
+    "tinygradient": "^1.1.5",
+    "ts-jest": "^29.0.3",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.8.4"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/src/index.js",
+    "test": "jest"
+  }
+}

@@ -54,7 +54,7 @@ export const stations:Station[] = [
       },
       margin: {
         top:    0,
-        bottom: -1
+        bottom: 0
       }
     }
   },

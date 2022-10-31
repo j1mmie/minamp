@@ -8,6 +8,7 @@ import figlet, { Fonts } from 'figlet'
 import { getMarginHeight, getNum, Station, StationHeader, stations } from './Stations.js'
 import { GradientPresetKey, GradientPresets } from './GradientPresets.js'
 import { DelaySecs } from './Delay.js'
+import { KeyAction, KeyBinds } from './Keybinds.js'
 
 type AsyncReturnType<T extends (...args: any) => Promise<any>> =
     T extends (...args: any) => Promise<infer R> ? R : any
@@ -18,8 +19,8 @@ const APP_VERSION = '0.0.1'
 const RAINBOW_OPTIONS = { interpolation: 'hsv', hsvSpin: 'long' }
 
 const STARTUP_HEADER:StationHeader = {
-  title:    APP_NAME,
-  font:     'Chunky',
+  title: APP_NAME,
+  font: 'Chunky',
   gradient: 'vice',
   pos: {
     top: 0,
@@ -100,16 +101,25 @@ class App {
     this._screen.append(this._labelHeader)
     this._screen.append(this._boxLoading)
 
-    this._screen.key(['escape', 'q', 'C-c'], this._end.bind(this))
-    this._screen.key(['p'], this._togglePlayPause.bind(this))
-    this._screen.key(['.'], this._nextStation.bind(this))
-    this._screen.key([','], this._prevStation.bind(this))
-    this._screen.key(['r'], this._randomStation.bind(this))
-    this._screen.key(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], this._gotoStationIndex.bind(this))
+    this._loadKeyBinds()
 
     this._setHeaderContent(STARTUP_HEADER)
 
     this._screen.render()
+  }
+
+  private _loadKeyBinds() {
+    this._loadKeyBind('quit',            this._end)
+    this._loadKeyBind('togglePlayPause', this._togglePlayPause)
+    this._loadKeyBind('nextStation',     this._nextStation)
+    this._loadKeyBind('prevStation',     this._prevStation)
+    this._loadKeyBind('randomStation',   this._randomStation)
+    this._loadKeyBind('gotoStation',     this._gotoStationIndex)
+  }
+
+  private _loadKeyBind(command:string, callback:KeyAction) {
+    var keys = KeyBinds.getKeysFor(command)
+    this._screen.key(keys, callback.bind(this))
   }
 
   private async _macroText(text:string, font?:Fonts):Promise<string> {
@@ -156,7 +166,7 @@ class App {
     const headerBottom = headerTop + lineHeight + getMarginHeight(header.margin)
 
     this._labelHeader.top    = headerTop
-    this._labelHeader.height = headerBottom
+    this._labelHeader.height = lineHeight
     this._labelsCaptions.top = headerBottom + 1
     this._labelContent.top   = headerBottom + 1
     this._boxLoading.top     = headerBottom

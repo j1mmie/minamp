@@ -1,5 +1,5 @@
 {
-  "name": "cl_amp",
+  "name": "minamp",
   "main": "dist/index",
   "type": "module",
   "_moduleAliases": {

@@ -105,6 +105,7 @@ class App {
     this._screen.key(['.'], this._nextStation.bind(this))
     this._screen.key([','], this._prevStation.bind(this))
     this._screen.key(['r'], this._randomStation.bind(this))
+    this._screen.key(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], this._gotoStationIndex.bind(this))
 
     this._setHeaderContent(STARTUP_HEADER)
 
@@ -169,7 +170,6 @@ class App {
     this._vlc = await createVlc()
     await DelaySecs(1)
     await this._startUpdateLoop()
-
   }
 
   private async _startUpdateLoop() {
@@ -259,8 +259,12 @@ class App {
 		return gradientString(leftColor, rightColor).multiline(text, RAINBOW_OPTIONS)
   }
 
-  private _animateContentChange() {
+  private _cancelContentChangeAnimation() {
     clearInterval(this._animationInterval)
+  }
+
+  private _animateContentChange() {
+    this._cancelContentChangeAnimation()
 
     let hue = 0
     let sat = .8
@@ -270,7 +274,10 @@ class App {
     const briDelta = .01
 
     this._animationInterval = setInterval(() => {
-      if (!this._currentContent) return
+      if (!this._currentContent) {
+        this._cancelContentChangeAnimation()
+        return
+      }
 
       hue += 5
       sat -= satDelta
@@ -280,7 +287,7 @@ class App {
       if (bri > 1) bri = 1
 
       if (sat <= 0 && bri >= 1) {
-        clearInterval(this._animationInterval)
+        this._cancelContentChangeAnimation()
         return
       }
 
@@ -303,6 +310,7 @@ class App {
       this._currentStation = station
     }
 
+    this._cancelContentChangeAnimation()
     this._setHeaderContent(this._currentStation.header)
     this._labelContent.setContent('--\n--')
 
@@ -321,6 +329,16 @@ class App {
 
   private async _randomStation() {
     const index = Math.floor(Math.random() * stations.length)
+    this._setCurrentStation(index)
+  }
+
+  private async _gotoStationIndex(key:string) {
+    if (key === '0') key = '10'
+    const index = parseInt(key) - 1
+
+    if (index < 0) return
+    if (index > stations.length - 1) return
+
     this._setCurrentStation(index)
   }
 }

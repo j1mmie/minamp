@@ -12,6 +12,11 @@ it really whips the command line's ass
 Command line music player for Mac, uses VLC and NightRide.fm under the hood.
 
 <img width="546" height="268" alt="image" src="https://github.com/user-attachments/assets/b26c66ca-fda6-43fe-8419-afcee92bb8b2" />
+<br />
+<img width="470" height="257" alt="image" src="https://github.com/user-attachments/assets/5b54efc5-1336-49a1-965d-e02de98829d3" />
+<br />
+<img width="293" height="199" alt="image" src="https://github.com/user-attachments/assets/937f80aa-cb22-4880-9839-ddf62444d832" />
+
 
 Dependencies:
 
@@ -28,14 +33,18 @@ Controls:
 
 | Key | Command          |
 | --- | ---------------- |
-| ,   | Previous Station |
-| .   | Next Station     |
 | p   | Play / Pause     |
+| ,   | Previous station |
+| .   | Next station     |
+| -   | Volume down      |
+| +   | Volume up        |
+| Esc | Quit             |
+| 1,2,3... | Goto station |
 
 ## todo:
 
-  1. Play/pause indicator
-  2. Volume control
+  1. [x] Play/pause indicator
+  2. [x] Volume control
   3. Marquee artist / title
   4. Custom keybinds from .minamp-keys.json file
   5. Custom stations from .minamp-stations.json file

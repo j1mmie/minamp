@@ -1,0 +1,212 @@
+import vlcStatic from 'vlc-static'
+import uniqueString from 'unique-string'
+import internalIp from 'internal-ip'
+import getPort from 'get-port'
+import execa from 'execa'
+import got from 'got'
+
+export interface Status {
+  readonly fullscreen: number | boolean;
+  readonly audiodelay: number;
+  readonly apiversion: number;
+  readonly currentplid: number;
+  readonly time: number;
+  readonly volume: number;
+  readonly length: number;
+  readonly random: boolean;
+  readonly audiofilters: AudioFilters;
+  readonly rate: number;
+  readonly videoeffects: VideoEffects;
+  readonly state: VLCPlaylistStatus;
+  readonly loop: boolean;
+  readonly version: string;
+  readonly position: number;
+  readonly date?: string;
+  readonly information?: Information;
+  readonly repeat: boolean;
+  readonly subtitledelay: number;
+  readonly equalizer: Equalizer[];
+}
+
+export declare type VLCPlaylistStatus = 'stopped' | 'playing' | 'paused' | 'unknown';
+
+export interface AudioFilters {
+  filter_0: string;
+  filter_1?: string;
+  filter_2?: string;
+  filter_3?: string;
+  filter_4?: string;
+}
+
+export interface Equalizer {
+  presets: Presets;
+  bands: Record<string, number>;
+  preamp: number;
+}
+
+export interface Presets {
+  'preset id="0"': string;
+  'preset id="1"': string;
+  'preset id="2"': string;
+  'preset id="3"': string;
+  'preset id="4"': string;
+  'preset id="5"': string;
+  'preset id="6"': string;
+  'preset id="7"': string;
+  'preset id="8"': string;
+  'preset id="9"': string;
+  'preset id="10"': string;
+  'preset id="11"': string;
+  'preset id="12"': string;
+  'preset id="13"': string;
+  'preset id="14"': string;
+  'preset id="15"': string;
+  'preset id="16"': string;
+  'preset id="17"': string;
+}
+
+export interface Information {
+  chapter: number;
+  chapters: any[];
+  title: number;
+  category: Category;
+  titles: any[];
+}
+
+export interface Category {
+  'Stream 0': Stream0;
+  'Stream 1': Stream1;
+  meta: Record<string, string | number>;
+}
+
+export interface Stream0 {
+  Decoded_format: string;
+  Color_transfer_function: string;
+  Chroma_location: string;
+  Video_resolution: string;
+  Frame_rate: string;
+  Codec: string;
+  Orientation: string;
+  Color_space: string;
+  Type: string;
+  Color_primaries: string;
+  Buffer_dimensions: string;
+}
+
+export interface Stream1 {
+  Codec: string;
+  Channels: string;
+  Type: string;
+  Bits_per_sample: string;
+  Language: string;
+  Sample_rate: string;
+}
+
+export interface VideoEffects {
+  hue: number;
+  saturation: number;
+  contrast: number;
+  brightness: number;
+  gamma: number;
+}
+
+export interface Playlist {
+  ro: string;
+  type: string;
+  name: string;
+  id: string;
+  children: Playlist[];
+}
+
+export class VlcClient {
+  private password: string
+  private ip?: string
+  private port?: number
+  private address?: string
+  private additionalOptions: string[]
+  private instance?: execa.ExecaChildProcess<string>
+
+  constructor(...additionalOptions:any[]) {
+    this.password = uniqueString()
+    this.additionalOptions = additionalOptions.map(_ => _.toString())
+  }
+
+  public async connect() {
+    this.ip = await internalIp.v4()
+    this.port = await getPort()
+
+    if (!this.ip) {
+      throw new Error('Unable to get internal IP address')
+    }
+    this.address = `http://${ this.ip }`
+    let options = ['--extraintf', 'http', '--intf', 'dummy', '--http-host', this.ip, '--http-port', this.port.toString(), '--http-password', this.password]
+    options = options.concat(this.additionalOptions)
+
+    this.instance = execa(vlcStatic(), options)
+  }
+
+  private async _request(path:string) {
+    if (!this.port || !this.password || !this.address) {
+      console.error('VlcClient: Not connected to a VLC instance yet.')
+      return undefined
+    }
+
+    return got(path, {
+      port: this.port,
+      password: this.password,
+      responseType: 'json',
+      prefixUrl: this.address,
+      resolveBodyOnly: true,
+    })
+  }
+
+  /**
+  Get the current player status.
+  */
+  public async info():Promise<Status> {
+    const result = await this._request('requests/status.json') as unknown as Status
+    return result
+
+  }
+
+  /**
+  Get the current playlist information.
+  */
+  async playlist():Promise<Playlist> {
+    const result = await this._request('requests/playlist.json') as unknown as Playlist
+    return result
+  }
+
+  /**
+  Execute a command.
+
+  @param command The [command](https://wiki.videolan.org/VLC_HTTP_requests#Full_command_list) to execute.
+  @param options The data to send with the command.
+  */
+  async command(command: string, options:{[key: string]: string } = {}) {
+    if (!this.port || !this.password || !this.address) {
+      console.error('VlcClient: Not connected to a VLC instance yet.')
+      return
+    }
+
+    const params = new URLSearchParams({
+      command,
+      ...options,
+    }).toString().replace(/\+/g, '%20')
+
+    await got(`requests/status.json?${ params }`, {
+      port: this.port,
+      password: this.password,
+      prefixUrl: this.address,
+      responseType: 'buffer',
+    })
+  }
+
+  /**
+  Kill the process.
+  */
+  kill() {
+    this.instance?.kill()
+    this.instance = undefined
+  }
+}

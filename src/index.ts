@@ -1,66 +1,72 @@
 import moduleAlias from 'module-alias'
 moduleAlias()
 
-import createVlc from '@richienb/vlc'
 import blessed from 'neo-blessed'
 import gradientString from 'gradient-string'
-import figlet, { Fonts } from 'figlet'
-import { getMarginHeight, getNum, Station, StationHeader, stations } from './Stations.js'
-import { GradientPresetKey, GradientPresets } from './GradientPresets.js'
+import { getMarginHeight, getNum, Station, stationDefaults, StationManager } from './StationManager.js'
 import { DelaySecs } from './Delay.js'
 import { KeyAction, KeyBinds } from './Keybinds.js'
+import chalk from 'chalk'
+import { VlcClient } from './vlc-client/VlcClient.js'
+import { cleanStreamContent, getLineHeight, gradientText, macroText, setFgBg } from './Helpers.js'
+import * as Constants from './Constants.js'
+import merge from 'deepmerge'
 
-type AsyncReturnType<T extends (...args: any) => Promise<any>> =
-    T extends (...args: any) => Promise<infer R> ? R : any
+import { DefaultStations } from './defaults/DefaultStations.js'
 
-const APP_NAME    = 'minamp'
-const APP_VERSION = '0.0.1'
+type MetaDataValue = string | number | undefined
 
 const RAINBOW_OPTIONS = { interpolation: 'hsv', hsvSpin: 'long' }
 
-const STARTUP_HEADER:StationHeader = {
-  title: APP_NAME,
-  font: 'Chunky',
-  gradient: 'vice',
-  pos: {
-    top: 0,
-  },
-  margin: {
-    top:    0,
-    bottom: 0
-  }
-}
+const MAX_VOLUME = 256
+const START_VOLUME = 128
+const MIN_VOLUME = 1
+const VOLUME_BAR_STRING = '▁▂▃▄▅▆▇'
 
+const LOADING_STATION = merge(stationDefaults, {
+  header: {
+    title:    Constants.APP_NAME,
+    font:     'chunky',
+    gradient: 'vice'
+  }
+})
 
 class App {
   private _screen:blessed.Widgets.Screen
 
   private _boxLoading:blessed.Widgets.BoxElement
-  private _labelsCaptions:blessed.Widgets.TextElement
+  private _labelStatus:blessed.Widgets.TextElement
   private _labelHeader:blessed.Widgets.TextElement
-  private _labelContent:blessed.Widgets.TextElement
+  private _labelTrack:blessed.Widgets.TextElement
+  private _volumeBar:blessed.Widgets.TextElement
 
-  private _vlc?:AsyncReturnType<typeof createVlc>
+  private _vlc:VlcClient
   private _updateInterval?:NodeJS.Timer
   private _animationInterval?:NodeJS.Timeout
 
-  private _currentStationIndex = 0
-  private _currentStation?:Station
+  private _stationManager:StationManager
 
-  private _currentContent?                   = '--\n--'
-  private _currentArtist?:(string | number)  = '--'
-  private _currentTrack?:(string | number)   = '--'
-  private _lastArtist                        = this._currentArtist
-  private _lastTrack                         = this._currentTrack
+  private _currentContent?                  = '--\n--'
+  private _trackDisplay1?:(string | number) = '--'
+  private _trackDisplay2?:(string | number) = '--'
+
+  private _lastTrackDisplay1 = this._trackDisplay1
+  private _lastTrackDisplay2 = this._trackDisplay2
+
+  private _isPlaying = false
 
   constructor() {
+    this._vlc = new VlcClient('--volume', START_VOLUME, '--volume-step', START_VOLUME, '--auhal-volume', START_VOLUME)
+
     this._screen = blessed.screen({
       fastCSR: true
     })
-    this._screen.title = APP_NAME
+    this._screen.title = Constants.APP_NAME
+
+    this._stationManager = new StationManager(LOADING_STATION, DefaultStations)
 
     this._labelHeader = blessed.text({
-      top:    getNum(STARTUP_HEADER.pos?.top),
+      top:    getNum(LOADING_STATION.header?.pos?.top),
       left:   2,
       right:  1,
       height: 1,
@@ -73,29 +79,37 @@ class App {
       left:   2,
       width:  24,
       bottom: 0,
-      content: `${APP_NAME} v${APP_VERSION}, \nloading...`,
+      content: `${Constants.APP_NAME} v${Constants.APP_VERSION}, \nloading...`,
       align: 'left'
     })
 
-    this._labelsCaptions = blessed.text({
+    this._labelStatus = blessed.text({
       top:    2,
       left:   2,
-      width:  '100%', // This gets changed after loading is complete
-      bottom: 0,
-      content: `${APP_NAME} v${APP_VERSION}\nloading...`,
+      width:  10,
+      height: 1,
+      content: '',
       border: undefined,
-      style: {
-        fg: '#5ee7df'
-      },
+      tags: true
     })
 
-    this._labelContent = blessed.text({
+    this._labelTrack = blessed.text({
       top:    1,
-      left:   11,
+      left:   13,
       right:  0,
       bottom: 0,
-      content: 'Content',
+      content: '--',
+      tags: true,
       border: undefined,
+    })
+
+    this._volumeBar = blessed.text({
+      top:    2,
+      left:   4,
+      width:  10,
+      height: 1,
+      content: '',
+      tags: true,
     })
 
     this._screen.append(this._labelHeader)
@@ -103,7 +117,7 @@ class App {
 
     this._loadKeyBinds()
 
-    this._setHeaderContent(STARTUP_HEADER)
+    this._setHeaderContent(LOADING_STATION)
 
     this._screen.render()
   }
@@ -114,7 +128,9 @@ class App {
     this._loadKeyBind('nextStation',     this._nextStation)
     this._loadKeyBind('prevStation',     this._prevStation)
     this._loadKeyBind('randomStation',   this._randomStation)
-    this._loadKeyBind('gotoStation',     this._gotoStationIndex)
+    this._loadKeyBind('gotoStation',     this._gotoStationByKeycode)
+    this._loadKeyBind('volumeUp',        this._volumeUp)
+    this._loadKeyBind('volumeDown',      this._volumeDown)
   }
 
   private _loadKeyBind(command:string, callback:KeyAction) {
@@ -122,78 +138,47 @@ class App {
     this._screen.key(keys, callback.bind(this))
   }
 
-  private async _macroText(text:string, font?:Fonts):Promise<string> {
-    if (!font) return text
-
-    return new Promise<string>((resolve, reject) => {
-      figlet.text(text, {
-        font:             font,
-        horizontalLayout: 'default',
-        verticalLayout:   'default',
-        width:            80,
-        whitespaceBreak:  true
-      }, (err, data) => {
-        if (err) {
-          console.log('Unable to draw macro text');
-          console.dir(err);
-        }
-
-        data ??= text
-        resolve(data)
-      })
-    })
-  }
-
-  private _gradientText(text:string, gradient?:(GradientPresetKey | tinycolor.ColorInput[])):string {
-    if (!gradient) return text
-
-    if (typeof gradient === 'string') {
-      const preset = GradientPresets[gradient]
-      return preset.multiline(text)
-    } else {
-      return gradientString(gradient).multiline(text)
-    }
-  }
-
-  private _getLineHeight(text:string) {
-    return (text.trim().match(/\n/g) || []).length + 1
-  }
-
-  private async _setHeaderContent(header:StationHeader) {
-    const macroText = await this._macroText(header.title, header.font)
-    const lineHeight = this._getLineHeight(macroText)
+  private async _setHeaderContent(station:Station) {
+    const header = station.header
+    const macroStr = await macroText(header.title, header.font)
+    const lineHeight = getLineHeight(macroStr)
     const headerTop = getNum(header.pos?.top)
     const headerBottom = headerTop + lineHeight + getMarginHeight(header.margin)
 
     this._labelHeader.top    = headerTop
     this._labelHeader.height = lineHeight
-    this._labelsCaptions.top = headerBottom + 1
-    this._labelContent.top   = headerBottom + 1
+    this._labelStatus.top    = headerBottom + 1
+    this._labelTrack.top     = headerBottom + 1
     this._boxLoading.top     = headerBottom
+    this._volumeBar.top      = headerBottom + 2
 
-    const gradientText = this._gradientText(macroText, header.gradient)
-    this._labelHeader.setContent(gradientText)
+    const gradientStr = gradientText(macroStr, header.gradient)
+    this._labelHeader.setContent(gradientStr)
+
     this._screen.render()
   }
 
   public async start() {
-    this._vlc = await createVlc()
+    await this._vlc.connect()
     await DelaySecs(1)
     await this._startUpdateLoop()
   }
 
   private async _startUpdateLoop() {
-    this._labelsCaptions.setContent('Artist: \nTitle:  ')
-    this._labelsCaptions.width = 24
+    this._setStatusLabelPlaying()
 
     this._screen.remove(this._boxLoading)
-    this._screen.append(this._labelsCaptions)
-    this._screen.append(this._labelContent)
+    this._screen.append(this._labelStatus)
+    this._screen.append(this._volumeBar)
+    this._screen.append(this._labelTrack)
 
-    let startupStationIndex = stations.findIndex(_ => _.default)
-    this._setCurrentStation(startupStationIndex)
+    this._stationManager.gotoUserDefault()
+    this._syncWithCurrentStation()
 
     await this._updateMeta()
+    this._isPlaying = true
+
+    await this._syncVolumeBar()
 
     this._updateInterval = setInterval(this._updateMeta.bind(this), 1500)
   }
@@ -203,6 +188,16 @@ class App {
     return process.exit(0)
   }
 
+  private _setStatusLabelPlaying() {
+    setFgBg(this._labelStatus, this._stationManager.currentStation.playStatus)
+    this._labelStatus.setContent('▶ Playing')
+  }
+
+  private _setStatusLabelPaused() {
+    setFgBg(this._labelStatus, this._stationManager.currentStation.pauseStatus)
+    this._labelStatus.setContent('█ Stopped')
+  }
+
   private async _togglePlayPause() {
     if (this._vlc === undefined) {
       console.error('VLC not found')
@@ -210,24 +205,24 @@ class App {
     }
 
     await this._vlc.command('pl_pause')
-  }
 
-  private _cleanContent(input:(string | undefined | number)) {
-    if (typeof input === 'number') {
-      input = input.toString()
+    // if (this._isPlaying) {
+    //   await this._vlc.command('pl_stop')
+    //   this._isPlaying = false
+    // } else {
+    //   await this._vlc.command('pl_play')
+    //   this._isPlaying = true
+    // }
+
+    const info = await this._vlc.info()
+
+    if (info.state === 'playing') {
+      this._setStatusLabelPlaying()
+    } else {
+      this._setStatusLabelPaused()
     }
 
-    const output = input ?? '--'
-
-    try {
-      return decodeURIComponent(output)
-    } catch {
-      try {
-        return decodeURI(output)
-      } catch {
-        return output
-      }
-    }
+    this._screen.render()
   }
 
   private async _updateMeta() {
@@ -239,28 +234,30 @@ class App {
     this._processMeta(meta?.artist, meta?.title)
   }
 
-  private _processMeta(artist:(string | number | undefined), track:(string | number | undefined)) {
-    this._currentArtist = artist
-    this._currentTrack  = track
+  private _processMeta(artist:MetaDataValue, track:MetaDataValue) {
+    this._trackDisplay1 = track
+    this._trackDisplay2 = artist
 
-    if (this._currentArtist === this._lastArtist &&
-        this._currentTrack  === this._lastTrack)
+    if (this._trackDisplay1 === this._lastTrackDisplay1 &&
+        this._trackDisplay2 === this._lastTrackDisplay2)
     {
       // The content has not changed
       return
     }
 
     const valuesItems = [
-      this._cleanContent(this._currentArtist),
-      this._cleanContent(this._currentTrack),
+      cleanStreamContent(this._trackDisplay1),
+      cleanStreamContent(this._trackDisplay2)
     ]
 
     this._currentContent = valuesItems.join('\n')
+    this._labelTrack.setContent(this._currentContent)
+    this._screen.render()
 
     this._animateContentChange()
 
-    this._lastArtist = this._currentArtist
-    this._lastTrack  = this._currentTrack
+    this._lastTrackDisplay1 = this._trackDisplay1
+    this._lastTrackDisplay2 = this._trackDisplay2
   }
 
   private _rainbowText(text:string, hue:number, saturation:number, brightness:number):string {
@@ -302,54 +299,94 @@ class App {
       }
 
       const text = this._rainbowText(this._currentContent, hue, sat, bri)
-      this._labelContent.setContent(text)
+      this._labelTrack.setContent(text)
       this._screen.render()
     }, 20)
   }
 
-  private async _setCurrentStation(station:(number | Station)) {
-    if (!this._vlc) return
-
-    if (typeof(station) === 'number') {
-      if (station >= stations.length) station = 0
-      if (station < 0) station += stations.length
-      this._currentStationIndex = station
-      this._currentStation = stations[station]
-    } else {
-      this._currentStationIndex = 0
-      this._currentStation = station
-    }
-
+  private async _syncWithCurrentStation() {
     this._cancelContentChangeAnimation()
-    this._setHeaderContent(this._currentStation.header)
-    this._labelContent.setContent('--\n--')
+    this._setHeaderContent(this._stationManager.currentStation)
+    this._labelTrack.setContent('--\n--')
 
     await this._vlc.command('in_play', {
-      input: this._currentStation.url,
+      input: this._stationManager.currentStation.url,
     })
   }
 
   private async _nextStation() {
-    this._setCurrentStation(this._currentStationIndex + 1)
+    this._stationManager.next()
+    await this._syncWithCurrentStation()
   }
 
   private async _prevStation() {
-    this._setCurrentStation(this._currentStationIndex - 1)
+    this._stationManager.previous()
+    await this._syncWithCurrentStation()
   }
 
   private async _randomStation() {
-    const index = Math.floor(Math.random() * stations.length)
-    this._setCurrentStation(index)
+    this._stationManager.random()
+    await this._syncWithCurrentStation()
   }
 
-  private async _gotoStationIndex(key:string) {
+  private async _gotoStationByKeycode(key:string) {
     if (key === '0') key = '10'
     const index = parseInt(key) - 1
+    await this._gotoStationByIndex(index)
+  }
 
-    if (index < 0) return
-    if (index > stations.length - 1) return
+  private async _gotoStationByIndex(index:number) {
+    this._stationManager.goto(index)
+    await this._syncWithCurrentStation()
+  }
 
-    this._setCurrentStation(index)
+  private async _changeVolume(val:string) {
+    if (!this._vlc) return
+
+    await this._vlc.command('volume', { val: val })
+    const info = await this._vlc.info()
+    let volume = info.volume
+
+    if (volume > MAX_VOLUME) {
+      await this._vlc.command('volume', { val: MAX_VOLUME.toString() })
+      volume = MAX_VOLUME
+    } else if (volume < MIN_VOLUME) {
+      await this._vlc.command('volume', { val: MIN_VOLUME.toString() })
+      volume = MIN_VOLUME
+    }
+
+    await this._syncVolumeBar()
+  }
+
+  private async _syncVolumeBar() {
+    if (!this._vlc) return
+
+    const info = await this._vlc.info()
+
+    const percent = info.volume / MAX_VOLUME
+    const fillCh = Math.round(percent * VOLUME_BAR_STRING.length)
+
+    const fg = this._stationManager.currentStation.volumeBar?.fg
+
+    let barSlice:string
+    if (fg) {
+      const bg = this._stationManager.currentStation.volumeBar?.bg || ''
+      barSlice = chalk.hex(fg)(VOLUME_BAR_STRING.slice(0, fillCh)) +
+                 chalk.hex(bg)(VOLUME_BAR_STRING.slice(fillCh))
+    } else {
+      barSlice = VOLUME_BAR_STRING.slice(0, fillCh)
+    }
+
+    this._volumeBar.setContent(barSlice)
+    this._screen.render()
+  }
+
+  private async _volumeUp() {
+    this._changeVolume('+10')
+  }
+
+  private async _volumeDown() {
+    this._changeVolume('-10')
   }
 }
 

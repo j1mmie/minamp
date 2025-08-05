@@ -26,12 +26,14 @@ class KeyBindsCls {
 
 
 const defaultKeyBinds:KeyBindsType = {
-  'quit':            ['escape', 'q', 'C-c'],
-  'togglePlayPause': 'p',
-  'nextStation':     '.',
-  'prevStation':     ',',
+  'quit':            ['escape', 'C-c'],
+  'togglePlayPause': ['p', 'space'],
+  'nextStation':     ['.', ']', 'w'],
+  'prevStation':     [',', '[', 'q'],
   'randomStation':   'r',
   'gotoStation':     ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+  'volumeUp':        ['=', 'a'],
+  'volumeDown':      ['-', 'z'],
 }
 
 

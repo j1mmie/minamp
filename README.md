@@ -9,6 +9,29 @@ it really whips the command line's ass
                                      |__|
 ```
 
+Command line music player for Mac, uses VLC and NightRide.fm under the hood.
+
+<img width="546" height="268" alt="image" src="https://github.com/user-attachments/assets/b26c66ca-fda6-43fe-8419-afcee92bb8b2" />
+
+Dependencies:
+
+1. VLC (`brew install vlc`)
+2. [Mise-en-place](https://mise.jdx.dev/getting-started.html) A tooling version manager (or nvm or fnm)   (`brew install mise`)
+
+Install:
+
+1. Install dependencies
+2. `npm install`
+3. `npm run start`
+
+Controls:
+
+| Key | Command          |
+| --- | ---------------- |
+| ,   | Previous Station |
+| .   | Next Station     |
+| p   | Play / Pause     |
+
 ## todo:
 
   1. Play/pause indicator
@@ -61,5 +84,3 @@ it really whips the command line's ass
   Title:   JEt
 
 ```
-
-## screenshots:

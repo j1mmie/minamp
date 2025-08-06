@@ -9,8 +9,16 @@ it really whips the command line's ass
                                      |__|
 ```
 
-Command line music player for Mac, uses VLC and NightRide.fm under the hood.
+Command line music player for Mac, uses VLC under the hood. Defaults to playing playlists from NightRide.fm. Can be configured to play any playlist though (local or remote).
 
+This is an old personal project so lots of unfinished work once I got it working to my liking!
+
+## Screenshots
+
+### Absolute minimnalist:
+<img width="212" height="124" alt="Screenshot 2025-08-06 at 11 25 44 AM" src="https://github.com/user-attachments/assets/db1c7124-1170-413f-a431-fe8069a533d0" />
+
+### More:
 <img width="546" height="268" alt="image" src="https://github.com/user-attachments/assets/b26c66ca-fda6-43fe-8419-afcee92bb8b2" />
 <br />
 <img width="470" height="257" alt="image" src="https://github.com/user-attachments/assets/5b54efc5-1336-49a1-965d-e02de98829d3" />
@@ -55,41 +63,3 @@ Controls:
   10. Station browser (Window to browse local stations stored in .minamp-stations.json)
   11. Station discovery (via dir.xiph.org?)
   12. Stretch: Built-in visualizations?
-
-## textgrabs:
-
-```
-
-     ,___       _  _
-    /   //  o  // //                _/_ /
-   /    /_ ,  // // (   __  , _ _   /  /_
-  (___// /_(_(/_(/_/_)_/ (_/_/ / /_(__/ /_
-                          /
-  Artist:  L'Avenue
-  Title:   Sun and the Moon (instrumental)
-
-```
-
-```
-  __________        __      __
-  \______   \ ____ |  | ___/  |_
-   |       _// __ \|  |/ /\   __\
-   |    |   \  ___/|    <  |  |
-   |____|_  /\___  >__|_ \ |__|
-          \/     \/     \/
-
-  Artist:  High Performance
-  Title:   Escape With Me Feat. CJ Neon
-
-```
-
-```
-
-  _  _ _ ____ _  _ ___ ____ _ ___  ____
-  |\ | | | __ |__|  |  |__/ | |  \ |___
-  | \| | |__] |  |  |  |  \ | |__/ |___
-
-  Artist:  MoTER
-  Title:   JEt
-
-```

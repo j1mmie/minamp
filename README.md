@@ -15,7 +15,8 @@ This is an old personal project so lots of unfinished work once I got it working
 
 ## Screenshots
 
-### Absolute minimnalist:
+### Absolute minimalist:
+(Using [kitty](https://github.com/kovidgoyal/kitty)) <br/>
 <img width="212" height="124" alt="Screenshot 2025-08-06 at 11 25 44 AM" src="https://github.com/user-attachments/assets/db1c7124-1170-413f-a431-fe8069a533d0" />
 
 ### More:
